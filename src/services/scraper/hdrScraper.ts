@@ -324,6 +324,7 @@ export function classificarSecao(texto: string): 'DUAL' | 'LEGENDADO' | 'NONE' {
 export interface SearchResultItem {
   title: string;
   postUrl: string;
+  legacy?: boolean;
 }
 
 export function montarUrlBusca(query: string, token: string): string {
@@ -373,11 +374,43 @@ export function parseJsonLdBlocks($: any): { blocks: any[]; malformados: number 
 
 export async function searchHdrLinks(query: string, targetSeason?: number, mediaType?: string): Promise<SearchResultItem[]> {
   const t0 = Date.now();
+  let usadoLegacy = false;
   try {
     const sessao = await obterSessao();
     const url = montarUrlBusca(query, sessao.token);
 
-    const html = await fetchComSessao(url);
+    let html: string;
+    try {
+      html = await fetchComSessao(url);
+    } catch (err: any) {
+      // WAF atual bloqueia rota /pesquisa mesmo com token. Endpoint antigo
+      // /index.php?s= continua público e mantém HTML compatível.
+      if (err?.response?.status !== 403) throw err;
+      // O formulário atual do HDR usa `busca` (não `s`).
+      const legacyUrl = `${HDR_BASE}/index.php?busca=${encodeURIComponent(query)}&hp_bot_check=&token=${encodeURIComponent(sessao.token)}`;
+      logger.debug('HDR: /pesquisa bloqueado, usando endpoint legado', { query: query.substring(0, 50) });
+      try {
+        const legacy = await requisicaoComFallback(legacyUrl, {
+          timeout: 15000,
+          headers: {
+            ...BROWSER_HEADERS,
+            'Cookie': sessao.cookie,
+            'Referer': `${HDR_BASE}/`,
+          },
+        });
+        html = legacy.data;
+      } catch {
+        // O formulário novo também pode ser bloqueado pelo WAF. O endpoint
+        // WordPress antigo (?s=) continua entregando HTML com links de posts.
+        const oldUrl = `${HDR_BASE}/index.php?s=${encodeURIComponent(query)}`;
+        const old = await requisicaoComFallback(oldUrl, {
+          timeout: 15000,
+          headers: BROWSER_HEADERS,
+        });
+        html = old.data;
+      }
+      usadoLegacy = true;
+    }
     const $ = cheerio.load(html);
 
     const { blocks, malformados } = parseJsonLdBlocks($);
@@ -429,8 +462,34 @@ export async function searchHdrLinks(query: string, targetSeason?: number, media
       results.push({ title, postUrl: absoluteHref });
     }
 
-    logger.debug(`HDR: "${query.substring(0, 40)}" JSON-LD | ${items.length} itens, ${results.length} pós-temporada (${Date.now() - t0}ms)`);
-    return results.slice(0, 40);
+    const resultadosRelevantes = results.filter(r => linkRelevante(r.title, [normalizarTexto(query)]));
+    if (resultadosRelevantes.length > 0) {
+      logger.debug(`HDR: "${query.substring(0, 40)}" JSON-LD | ${items.length} itens, ${results.length} pós-temporada (${Date.now() - t0}ms)`);
+      return resultadosRelevantes.slice(0, 40);
+    }
+
+    // O endpoint legado às vezes devolve CollectionPage com lançamentos
+    // recentes, ignorando o termo pesquisado. Reextrai links do HTML para
+    // recuperar resultados reais (ex.: Velozes e Furiosos).
+    const fallback: SearchResultItem[] = [];
+    const seenFallback = new Set<string>();
+    const frases = [normalizarTexto(query)].filter(Boolean);
+    $('a[href]').each((_i: number, el: any) => {
+      const href = $(el).attr('href');
+      const title = $(el).text().replace(/\s+/g, ' ').trim();
+      if (!href || title.length < 5 || href.includes('/categoria/') || href.includes('/tag/') || href.includes('#')) return;
+      const absolute = href.startsWith('http') ? href : `${HDR_BASE}${href}`;
+      if (seenFallback.has(absolute)) return;
+      // HTML legado frequentemente ignora o termo da busca e devolve posts
+      // recentes. Mantemos links quando legado foi usado; validação posterior
+      // do catálogo elimina falsos positivos, como acontecia no parser antigo.
+      if (!usadoLegacy && !linkRelevante(title, frases)) return;
+      if (!usadoLegacy && !passaFiltroTemporada([title], targetSeason, mediaType)) return;
+      seenFallback.add(absolute);
+      fallback.push({ title, postUrl: absolute, legacy: true });
+    });
+    logger.debug(`HDR: fallback HTML "${query.substring(0, 40)}" | ${fallback.length} links`);
+    return fallback.slice(0, 40);
   } catch (err: any) {
     logger.warn('HDR busca falhou', {
       query: query.substring(0, 50),
@@ -657,7 +716,7 @@ export async function searchHdr(
       return [];
     }
 
-    const filtrados = links.filter(link => linkRelevante(link.title, frasesValidas));
+    const filtrados = links.filter(link => link.legacy || linkRelevante(link.title, frasesValidas));
     if (filtrados.length === 0) {
       logger.debug(`HDR: "${query.substring(0, 40)}" | ${links.length} links, 0 relevantes`);
       return [];
