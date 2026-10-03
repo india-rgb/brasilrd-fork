@@ -9,10 +9,27 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const DATABASE_URL = 
+const RAW_DATABASE_URL =
   process.env.DATABASE_URL ||
   process.env.POSTGRES_URL ||
   process.env.DATABASE_PUBLIC_URL;
+
+// pg permite que `sslmode` na connection string sobrescreva o objeto SSL
+// passado pelo Sequelize. Supabase exige TLS, mas o pooler pode apresentar
+// cadeia própria; remove sslmode e controla SSL exclusivamente abaixo.
+let DATABASE_URL = RAW_DATABASE_URL;
+try {
+  if (RAW_DATABASE_URL) {
+    const parsedUrl = new URL(RAW_DATABASE_URL);
+    parsedUrl.searchParams.delete('sslmode');
+    parsedUrl.searchParams.delete('sslcert');
+    parsedUrl.searchParams.delete('sslkey');
+    parsedUrl.searchParams.delete('sslrootcert');
+    DATABASE_URL = parsedUrl.toString();
+  }
+} catch {
+  // Mantém URL original; Sequelize exibirá o erro de conexão se inválida.
+}
 
 if (!DATABASE_URL && process.env.NODE_ENV === 'production') {
   throw new Error('URL do banco de dados nao configurada para producao');
@@ -29,7 +46,7 @@ const isRailway = DATABASE_URL?.includes('railway.app') || DATABASE_URL?.include
 const isRailwayExternal = DATABASE_URL?.includes('railway.app') && !DATABASE_URL?.includes('railway.internal');
 const sslEnabled =
   process.env.DB_SSL?.toLowerCase() === 'true' ||
-  /[?&]sslmode=require(?:&|$)/i.test(DATABASE_URL || '') ||
+  /[?&]sslmode=require(?:&|$)/i.test(RAW_DATABASE_URL || '') ||
   isRailwayExternal;
 
 const sequelizeConfig: any = {
