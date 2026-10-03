@@ -27,6 +27,10 @@ if (process.env.NODE_ENV !== 'production') {
 
 const isRailway = DATABASE_URL?.includes('railway.app') || DATABASE_URL?.includes('railway.internal');
 const isRailwayExternal = DATABASE_URL?.includes('railway.app') && !DATABASE_URL?.includes('railway.internal');
+const sslEnabled =
+  process.env.DB_SSL?.toLowerCase() === 'true' ||
+  /[?&]sslmode=require(?:&|$)/i.test(DATABASE_URL || '') ||
+  isRailwayExternal;
 
 const sequelizeConfig: any = {
   logging: false,
@@ -43,7 +47,9 @@ const sequelizeConfig: any = {
 
 if (DATABASE_URL?.includes('postgres')) {
   sequelizeConfig.dialectOptions = {
-    ssl: isRailwayExternal ? { require: true, rejectUnauthorized: false } : false
+    // Supabase pooler usa sslmode=require e pode apresentar cadeia própria.
+    // DB_SSL=true também habilita SSL para URLs sem sslmode explícito.
+    ssl: sslEnabled ? { require: true, rejectUnauthorized: false } : false
   };
 }
 
