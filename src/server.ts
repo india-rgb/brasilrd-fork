@@ -469,3 +469,9 @@ if (!isServerless) {
 }
 
 export { app };
+
+// Compatibilidade com detecção automática do runtime Node da Vercel.
+// O entrypoint oficial continua sendo api/index.js/getApp(), mas algumas
+// configurações da Vercel inspecionam src/server.ts diretamente e exigem um
+// default export que seja um servidor Express.
+export default app;

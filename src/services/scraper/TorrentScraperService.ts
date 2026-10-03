@@ -12,6 +12,11 @@ const logger = new Logger('TorrentScraperService');
 
 const SOURCE_TIMEOUT_MS = 20000;
 
+function scraperEnabled(name: string): boolean {
+    const value = process.env[name]?.trim().toLowerCase();
+    return value === undefined || !['0', 'false', 'off', 'no'].includes(value);
+}
+
 function withTimeout<T>(promise: Promise<T>, fallback: T, ms: number = SOURCE_TIMEOUT_MS): Promise<T> {
     return Promise.race([
         promise,
@@ -49,6 +54,10 @@ export class TorrentScraperService {
             const ehAnime = type === 'anime' || isAnime === true;
             // O WordPressScraper restringe a DarkMahou quando type === 'anime'
             const wpType: 'movie' | 'series' | 'anime' = ehAnime ? 'anime' : type;
+            const bludvEnabled = scraperEnabled('SCRAPER_BLUDV_ENABLED');
+            const wordpressEnabled = scraperEnabled('SCRAPER_WORDPRESS_ENABLED');
+            const starckEnabled = scraperEnabled('SCRAPER_STARCK_ENABLED');
+            const hdrEnabled = scraperEnabled('SCRAPER_HDR_ENABLED');
 
             let tmdbData = null;
             if (imdbId) {
@@ -81,13 +90,15 @@ export class TorrentScraperService {
                 // Para anime, apenas o DarkMahou é consultado (filtrado no wordpressScraper);
                 // BLUDV/Starck/HDR são pulados (indexam só filmes/séries).
                 withTimeout(Promise.all([
-                    ...(ehAnime ? [] : [
+                    ...(bludvEnabled && !ehAnime ? [
                         this.bludvScraper.search(qEn, type).catch(() => []),
                         this.bludvScraper.search(qPt, type).catch(() => []),
-                    ]),
-                    this.wpScraper.search(qEn, wpType, targetSeason).catch(() => []),
-                    ptDiferente ? this.wpScraper.search(qPt, wpType, targetSeason).catch(() => []) : Promise.resolve([]),
-                    ...altQueries.map(q => this.wpScraper.search(q, wpType, targetSeason).catch(() => []))
+                    ] : []),
+                    ...(wordpressEnabled ? [
+                        this.wpScraper.search(qEn, wpType, targetSeason).catch(() => []),
+                        ptDiferente ? this.wpScraper.search(qPt, wpType, targetSeason).catch(() => []) : Promise.resolve([]),
+                        ...altQueries.map(q => this.wpScraper.search(q, wpType, targetSeason).catch(() => [])),
+                    ] : [])
                 ]).then(all => {
                     const seen = new Set<string>();
                     return all.flat().filter(t => {
@@ -98,7 +109,7 @@ export class TorrentScraperService {
                 }).catch(() => []), []),
 
                 // Starck
-                ehAnime ? Promise.resolve([]) : withTimeout(Promise.all([
+                ehAnime || !starckEnabled ? Promise.resolve([]) : withTimeout(Promise.all([
                     searchStarck(qEn, type),
                     ptDiferente ? searchStarck(qPt, type) : Promise.resolve([])
                 ]).then(([en, pt]) => {
@@ -110,7 +121,7 @@ export class TorrentScraperService {
                 }).catch(() => []), []),
 
                 // HDR
-                ehAnime ? Promise.resolve([]) : withTimeout(Promise.all([
+                ehAnime || !hdrEnabled ? Promise.resolve([]) : withTimeout(Promise.all([
                     searchHdr(qEn, type),
                     ptDiferente ? searchHdr(qPt, type) : Promise.resolve([])
                 ]).then(([en, pt]) => {
