@@ -8,7 +8,11 @@ import path from 'path';
 
 // Cache: palavra → existe em algum título no TMDB?
 const omdbWordCache = new Map<string, boolean>();
-const STRIP_WORDS_PATH = path.resolve(process.cwd(), 'data', 'strip-words.txt');
+// Vercel lambda filesystem é read-only em /var/task; /tmp é gravável, porém
+// efêmero. Persistência definitiva continua sendo data/ localmente.
+const STRIP_WORDS_PATH = process.env.VERCEL
+  ? path.join('/tmp', 'brasilrd-strip-words.txt')
+  : path.resolve(process.cwd(), 'data', 'strip-words.txt');
 
 // Fila global de background: processa 1 palavra por vez, sem duplicatas
 const stripQueue: Set<string> = new Set();

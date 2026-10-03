@@ -707,7 +707,9 @@ const tmdbVerifiedWords = new Set<string>();
 // ── Persistência: data/strip-words.txt (1 palavra por linha) ──
 import * as fs from 'fs';
 import * as path from 'path';
-const STRIP_FILE = path.join(process.cwd(), 'data', 'strip-words.txt');
+const STRIP_FILE = process.env.VERCEL
+  ? path.join('/tmp', 'brasilrd-strip-words.txt')
+  : path.join(process.cwd(), 'data', 'strip-words.txt');
 
 // Carrega palavras persistidas no startup
 try {
