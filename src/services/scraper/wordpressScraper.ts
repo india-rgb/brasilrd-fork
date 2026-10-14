@@ -195,7 +195,7 @@ const WP_SITES: WordPressSite[] = [
   },
   {
     name: 'Starck Oficial',
-    baseUrl: process.env.WORDPRESS_STARCK_URL?.trim() || 'https://www.starck-oficial.com',
+    baseUrl: process.env.WORDPRESS_STARCK_URL?.trim() || 'https://starckfilmes-v26.com',
     priority: 1,
     timeout: 15000,
   },
