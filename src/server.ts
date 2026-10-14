@@ -94,14 +94,12 @@ async function initializeDatabase() {
         await sequelize.sync(syncOptions);
         await sequelize.authenticate();
     } catch (error) {
-        logger.error('Falha no banco de dados', {
+        // Banco indisponível (ex.: local sem Postgres, host de rede interna do
+        // docker "brasilrd-postgres") não deve impedir o addon de subir.
+        // Sem persistência o addon segue funcionando via scraping/catálogo.
+        logger.warn('Banco de dados indisponível — seguindo sem persistência', {
             error: error instanceof Error ? error.message : 'Erro desconhecido'
         });
-        if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
-            logger.warn('Continuando sem banco de dados em produção/serverless');
-        } else {
-            throw error;
-        }
     }
 }
 

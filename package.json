@@ -7,7 +7,7 @@
   "scripts": {
     "build": "node build.js",
     "deploy": "node scripts/deploy-release.js",
-    "start": "node railway-start.js",
+    "start": "node dist/server.js",
     "start:stremio": "node dist/server.js",
     "dev": "node scripts/dev.js",
     "dev:tunnel": "node scripts/dev-tunnel.js",
