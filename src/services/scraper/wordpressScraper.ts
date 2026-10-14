@@ -21,6 +21,38 @@ const LEGENDADO_REGEX = new RegExp(
 
 const logger = new Logger('WordPressScraper');
 
+// Cache negativo por site/query: evita repetir buscas que retornaram vazio,
+// mas só marca respostas HTTP válidas — timeout/proxy/WAF continuam retryáveis.
+const WP_NEGATIVE_TTL_MS = 30 * 60 * 1000;
+const WP_NEGATIVE_MAX = 5000;
+const wpNegativeStore = new Map<string, number>();
+
+function wpNegativeKey(site: string, query: string, type: string, season?: number): string {
+  return `${site}|${type}|${season ?? 0}|${query.trim().toLowerCase()}`;
+}
+
+function wpNegativeIsBlocked(key: string): boolean {
+  const timestamp = wpNegativeStore.get(key);
+  if (timestamp === undefined) return false;
+  if (Date.now() - timestamp > WP_NEGATIVE_TTL_MS) {
+    wpNegativeStore.delete(key);
+    return false;
+  }
+  return true;
+}
+
+function wpNegativeMark(key: string): void {
+  if (wpNegativeStore.size >= WP_NEGATIVE_MAX) {
+    const first = wpNegativeStore.keys().next().value;
+    if (first) wpNegativeStore.delete(first);
+  }
+  wpNegativeStore.set(key, Date.now());
+}
+
+export function wpNegativeClear(): void {
+  wpNegativeStore.clear();
+}
+
 /** Decodifica entidades HTML da API do WordPress (&#8211;, &amp;, &nbsp;...) */
 function decodificarHtml(texto: string): string {
   if (!texto) return texto;
@@ -183,14 +215,20 @@ export class WordPressScraper {
       .filter(s => !isAnime || s.name === 'DarkMahou')
       .sort((a, b) => b.priority - a.priority);
 
-    const promises = activeSites.map(site =>
-      this.searchSite(site, query, type, targetSeason).then(r => {
+    const promises = activeSites.map(site => {
+      const negativeKey = wpNegativeKey(site.name, query, type, targetSeason);
+      if (wpNegativeIsBlocked(negativeKey)) {
+        logger.debug(`WP negative cache HIT: ${site.name} "${query.substring(0, 50)}"`);
+        return Promise.resolve([] as TorrentResult[]);
+      }
+      return this.searchSite(site, query, type, targetSeason).then(r => {
+        if (r.length === 0) wpNegativeMark(negativeKey);
         return r;
       }).catch(err => {
         logger.warn(` WP ${site.name} FALHOU`, { query: query.substring(0, 60), error: err.code || err.message });
         return [] as TorrentResult[];
-      })
-    );
+      });
+    });
     const arrays = await Promise.all(promises);
     arrays.forEach(arr => results.push(...arr));
 
@@ -233,7 +271,7 @@ export class WordPressScraper {
 
     const processTerm = async (term: string): Promise<{ results: TorrentResult[]; postsFound: boolean }> => {
       const encodedQuery = encodeURIComponent(term);
-      const apiUrl = `${site.baseUrl}/wp-json/wp/v2/posts?search=${encodedQuery}&per_page=15&_fields=id,title,link,content,excerpt,date`;
+      const apiUrl = `${site.baseUrl}/wp-json/wp/v2/posts?search=${encodedQuery}&per_page=100&_fields=id,title,link,content,excerpt,date`;
 
       // DNS bypass + Crawlee-style anti-bot headers
       const response = await axios.get(apiUrl, {

@@ -501,6 +501,7 @@ export function extrairRangeEpisodios(title: string): EpisodeRange | null {
   const t = title
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/_/g, ' ')
     .trim();
 
   // ═══ Packs completos — retorna null (temporada inteira) ═══
@@ -580,6 +581,17 @@ export function extrairRangeEpisodios(title: string): EpisodeRange | null {
       episodeStart: parseInt(seasonEpText[2]),
       episodeEnd: parseInt(seasonEpText[2]),
     };
+  }
+
+  // Formatos curtos comuns em anime: "Ep 04", "Ep 04-06", "EP 04 a 06".
+  const epRange = t.match(/\bep\s*(\d{1,3})\s*(?:ao?|a|ate|à|aos|e|-|–|—|~)\s*(\d{1,3})\b/i);
+  if (epRange) {
+    return { season: 0, episodeStart: parseInt(epRange[1]), episodeEnd: parseInt(epRange[2]) };
+  }
+  const epSingle = t.match(/\bep\s*(\d{1,3})\b/i);
+  if (epSingle) {
+    const ep = parseInt(epSingle[1]);
+    return { season: 0, episodeStart: ep, episodeEnd: ep };
   }
 
   return null;
