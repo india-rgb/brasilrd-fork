@@ -18,6 +18,26 @@ const titleFilter = TitleFilter.getInstance();
 const episodeMatcher = EpisodeMatcher.getInstance();
 const qualityDetector = QualityDetector.getInstance();
 
+// Banco offline (local/docker sem Postgres) gera dezenas de logs idênticos
+// por request. Deduplica por mensagem: loga 1x por tipo, por minuto.
+const errosDbRecentes = new Map<string, number>();
+
+function logFalhaPersistencia(campo: string, detalhe: object, mensagem: string): void {
+  const ehBancoOffline = /getaddrinfo|ECONNREFUSED|ECONNREFUSED|connect ECONN|self.?signed/i.test(mensagem);
+  const agora = Date.now();
+  if (ehBancoOffline) {
+    const ultimo = errosDbRecentes.get(campo) ?? 0;
+    if (agora - ultimo < 60_000) {
+      logger.debug(`[DB] ${campo} (repetido)`);
+      return;
+    }
+    errosDbRecentes.set(campo, agora);
+    logger.warn(`[DB] ${campo} — banco indisponível, continuando sem persistência`, detalhe);
+    return;
+  }
+  logger.error(campo, detalhe);
+}
+
 // Legendado indicators da fonte unica (TechnicalWords)
 const LEGENDADO_REGEX = new RegExp(
   '\\b(' + INDICADORES_INTERNACIONAL_TORRENTS
@@ -284,11 +304,15 @@ export class AutoMagnetService {
       }
 
     } catch (error) {
-      logger.error('Erro ao adicionar magnet', {
-        title: torrentTitle.substring(0, 60),
-        imdbId: imdbId,
-        error: error instanceof Error ? error.message : 'Erro'
-      });
+      logFalhaPersistencia(
+        'add magnet',
+        {
+          title: torrentTitle.substring(0, 60),
+          imdbId: imdbId,
+          error: error instanceof Error ? error.message : 'Erro',
+        },
+        error instanceof Error ? error.message : String(error)
+      );
 
       const result = {
         success: false,
@@ -537,12 +561,16 @@ export class AutoMagnetService {
       return true;
 
     } catch (error) {
-      logger.error('Erro ao salvar magnet', {
-        error: error instanceof Error ? error.message : 'Erro',
-        title: magnetData.title.substring(0, 60),
-        imdbId: magnetData.imdbId,
-        versao: this.VERSION
-      });
+      logFalhaPersistencia(
+        'salvar magnet',
+        {
+          error: error instanceof Error ? error.message : 'Erro',
+          title: magnetData.title.substring(0, 60),
+          imdbId: magnetData.imdbId,
+          versao: this.VERSION,
+        },
+        error instanceof Error ? error.message : String(error)
+      );
       throw error;
     }
   }

@@ -345,9 +345,14 @@ export class StreamHandler {
 
       return { success: true, streams, source: 'database', processingTime: Date.now() - startTime };
     } catch (error) {
-      this.logger.error('Erro na busca no banco', {
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
-        tempo: Date.now() - startTime
+      const mensagem = error instanceof Error ? error.message : 'Erro desconhecido';
+      // Banco offline (ex.: host docker 'brasilrd-postgres') não é erro grave;
+      // o addon segue pelo scraping/catálogo.
+      const bancoOffline = /getaddrinfo|ECONNREFUSED|connect ECONN/i.test(mensagem);
+      const nivel = bancoOffline ? 'warn' : 'error';
+      (this.logger as any)[nivel]('Busca no banco indisponível' + (bancoOffline ? '' : ' (erro)'), {
+        error: mensagem,
+        tempo: Date.now() - startTime,
       });
       return { success: false, streams: [], source: 'database', processingTime: Date.now() - startTime };
     }

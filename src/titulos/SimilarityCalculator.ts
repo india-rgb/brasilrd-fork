@@ -638,6 +638,14 @@ export class SimilarityCalculator {
   /** Auto-aprender: adiciona palavra ao strip-words.txt */
   private autoAprenderStripWord(word: string): void {
     try {
+      if (process.env.VERCEL) {
+        // Lambda é efêmero: gravar em disco não persiste entre resets.
+        // Aprendizado acontece na memória para a sessão atual.
+        TECHNICAL_STRIP_WORDS.add(word.toLowerCase());
+        return;
+      }
+      const dirname = path.dirname(STRIP_WORDS_PATH);
+      if (!fs.existsSync(dirname)) fs.mkdirSync(dirname, { recursive: true });
       const existing = new Set<string>();
       if (fs.existsSync(STRIP_WORDS_PATH)) {
         const content = fs.readFileSync(STRIP_WORDS_PATH, 'utf8');
@@ -648,12 +656,11 @@ export class SimilarityCalculator {
       }
       if (!existing.has(word.toLowerCase())) {
         fs.appendFileSync(STRIP_WORDS_PATH, word.toLowerCase() + '\n');
-        // Atualiza a memória IMEDIATAMENTE pra já valer na sessão atual
         TECHNICAL_STRIP_WORDS.add(word.toLowerCase());
-        this.logger.info(`📝 Strip-word aprendida: "${word}" → data/strip-words.txt`);
+        this.logger.debug(`📝 Strip-word aprendida: "${word}" → data/strip-words.txt`);
       }
     } catch (err) {
-      this.logger.error(`❌ Erro ao salvar strip-word "${word}": ${err instanceof Error ? err.message : err}`);
+      this.logger.debug(`❌ Falha não crítica ao salvar strip-word "${word}": ${err instanceof Error ? err.message : err}`);
     }
   }
 
