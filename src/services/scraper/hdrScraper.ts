@@ -327,30 +327,28 @@ export interface SearchResultItem {
   legacy?: boolean;
 }
 
-export function montarUrlBusca(query: string, token: string): string {
+export function montarUrlBusca(query: string, _token?: string): string {
   const termo = encodeURIComponent(query.trim()).replace(/%20/g, '+');
-  return `${HDR_BASE}/pesquisa/${termo}/?hp_bot_check=&token=${token}`;
+  // O HDR atual não usa mais token/CSRF no formulário de busca (2026).
+  return `${HDR_BASE}/pesquisa/${termo}/`;
 }
 
-// GET com cookie/headers; renova sessão e retenta uma vez em 403.
-export async function fetchComSessao(url: string, tentativa = 0): Promise<string> {
-  const sessao = await obterSessao(tentativa > 0);
-
+// GET com headers de navegador. Retry apenas em 5xx (falha transiente).
+export async function fetchComSessao(url: string, _tentativa = 0): Promise<string> {
   try {
     const res = await requisicaoComFallback(url, {
       timeout: 15000,
       headers: {
         ...BROWSER_HEADERS,
-        'Cookie': sessao.cookie,
         'Referer': `${HDR_BASE}/`,
       },
     });
     return res.data;
   } catch (err: any) {
     const status = err?.response?.status;
-    if (status === 403 && tentativa === 0) {
-      logger.debug('HDR: 403 detectado, renovando sessão e retentando');
-      sessaoCache = null;
+    // Sem sessão a renovar; 403 significa bloqueio do WAF/IP.
+    if (status && status >= 500 && status < 600) {
+      logger.debug('HDR: erro 5xx, retentando');
       return fetchComSessao(url, 1);
     }
     throw err;
@@ -376,25 +374,21 @@ export async function searchHdrLinks(query: string, targetSeason?: number, media
   const t0 = Date.now();
   let usadoLegacy = false;
   try {
-    const sessao = await obterSessao();
-    const url = montarUrlBusca(query, sessao.token);
+    const url = montarUrlBusca(query);
 
     let html: string;
     try {
       html = await fetchComSessao(url);
     } catch (err: any) {
-      // WAF atual bloqueia rota /pesquisa mesmo com token. Endpoint antigo
-      // /index.php?s= continua público e mantém HTML compatível.
+      // WAF atual pode bloquear /pesquisa. Endpoint antigo entrega HTML.
       if (err?.response?.status !== 403) throw err;
-      // O formulário atual do HDR usa `busca` (não `s`).
-      const legacyUrl = `${HDR_BASE}/index.php?busca=${encodeURIComponent(query)}&hp_bot_check=&token=${encodeURIComponent(sessao.token)}`;
+      const legacyUrl = `${HDR_BASE}/index.php?busca=${encodeURIComponent(query)}`;
       logger.debug('HDR: /pesquisa bloqueado, usando endpoint legado', { query: query.substring(0, 50) });
       try {
         const legacy = await requisicaoComFallback(legacyUrl, {
           timeout: 15000,
           headers: {
             ...BROWSER_HEADERS,
-            'Cookie': sessao.cookie,
             'Referer': `${HDR_BASE}/`,
           },
         });
