@@ -92,8 +92,9 @@ const dnsAgent = new DnsAgent({ keepAlive: true });
 // PROXY_URL no .env:
 //   http://user:senha@host:8888 → proxy HTTP (gluetun, Privoxy, Squid)
 //   https://host:port           → proxy HTTPS
-// Quando definido, TODAS as requisições dos scrapers saem pelo proxy
-// (ex.: http://protonvpn:8888 no Docker, ou proxy exposto de casa no Vercel).
+//   socks5://user:senha@host:port → proxy SOCKS5
+// Quando definido, USADO APENAS NA RASPAGEM dos indexadores. A reprodução
+// (Torbox/magnet P2P) sempre é direct play — o addon não serve o vídeo.
 const PROXY_URL = process.env.PROXY_URL?.trim() || '';
 
 function createProxyAgent(proxyUrl: string): any {
@@ -103,6 +104,14 @@ function createProxyAgent(proxyUrl: string): any {
   const proxyAuth = url.username
     ? `${decodeURIComponent(url.username)}:${decodeURIComponent(url.password)}`
     : undefined;
+
+  if (url.protocol === 'socks:' || url.protocol === 'socks5:' || url.protocol === 'socks5h:') {
+    const { SocksProxyAgent } = require('socks-proxy-agent');
+    const target = proxyAuth
+      ? `${url.protocol}//${proxyAuth}@${host}:${port}`
+      : `${url.protocol}//${host}:${port}`;
+    return new SocksProxyAgent(target);
+  }
 
   if (url.protocol === 'https:') {
     return tunnel.httpsOverHttps({ proxy: { host, port, proxyAuth } });

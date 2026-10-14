@@ -34,6 +34,7 @@
     "prom-client": "^14.2.0",
     "request-ip": "^3.3.0",
     "sequelize": "^6.37.8",
+    "socks-proxy-agent": "^10.1.0",
     "stremio-addon-sdk": "^1.6.10",
     "ts-node": "^10.9.0",
     "tsconfig-paths": "^4.2.0",
