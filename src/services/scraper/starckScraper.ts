@@ -1,4 +1,4 @@
-// starck-oficial.com HTML Scraper — 2-passos: busca → página de post → magnet base64
+// Starck Filmes HTML Scraper — busca → magnets diretos/base64
 // Usa o mesmo DNS bypass do WordPress/TPB scraper
 // Apenas entrega dados brutos do HTML (igual TPB/RARGB scraper)
 
@@ -9,7 +9,7 @@ import { agenteHttps, lookupCustomizado } from './wordpressScraper.js';
 
 const logger = new Logger('StarckScraper');
 
-const STARCK_BASE = process.env.STARCK_BASE_URL?.trim() || 'https://www.starck-oficial.com';
+const STARCK_BASE = process.env.STARCK_BASE_URL?.trim() || 'https://starckfilmes-v26.com';
 
 // ── Tipos ─────────────────────────────────────────────────────────────
 
@@ -39,7 +39,26 @@ interface SearchResultItem {
   postUrl: string;
 }
 
-async function searchStarckLinks(query: string): Promise<SearchResultItem[]> {
+interface StarckSearchResult {
+  links: SearchResultItem[];
+  directMagnets: StarckTorrent[];
+}
+
+function decodeDirectMagnets(html: string): StarckTorrent[] {
+  const results: StarckTorrent[] = [];
+  const seen = new Set<string>();
+  const matches = html.match(/magnet:\?[^"'<>\s]+/gi) || [];
+  for (const raw of matches) {
+    const magnet = raw.replace(/&amp;/gi, '&');
+    const hash = magnet.match(/btih:([a-fA-F0-9]{40})/i)?.[1]?.toLowerCase();
+    if (!hash || seen.has(hash)) continue;
+    seen.add(hash);
+    results.push({ magnet, infoHash: hash });
+  }
+  return results;
+}
+
+async function searchStarckLinks(query: string): Promise<StarckSearchResult> {
   const searchUrl = `${STARCK_BASE}/?s=${encodeURIComponent(query)}`;
 
   try {
@@ -62,10 +81,13 @@ async function searchStarckLinks(query: string): Promise<SearchResultItem[]> {
       });
     });
 
-    return results.slice(0, 40);
+    return {
+      links: results.slice(0, 40),
+      directMagnets: decodeDirectMagnets(res.data),
+    };
   } catch (err: any) {
     logger.warn('Starck busca falhou', { query: query.substring(0, 50), error: err.message });
-    return [];
+    return { links: [], directMagnets: [] };
   }
 }
 
@@ -118,13 +140,13 @@ export async function searchStarck(
 
   try {
     // PASSO 1: Busca → URLs de posts
-    const links = await searchStarckLinks(query);
-    if (links.length === 0) return [];
+    const search = await searchStarckLinks(query);
+    const links = search.links;
+    const allResults: StarckTorrent[] = [...search.directMagnets];
+    if (links.length === 0 && allResults.length === 0) return [];
 
     // PASSO 2: Para cada post, extrai magnets (paralelo, max 8)
     const batchSize = 8;
-    const allResults: StarckTorrent[] = [];
-
     for (let i = 0; i < links.length; i += batchSize) {
       const batch = links.slice(i, i + batchSize);
       const batchResults = await Promise.all(
