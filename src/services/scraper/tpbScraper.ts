@@ -16,12 +16,16 @@ export interface TpbTorrent {
   infoHash: string;
 }
 
-const MIRRORS = [
+const DEFAULT_MIRRORS = [
   { url: 'https://www4.thepiratebay3.co', priority: 1 },
   { url: 'https://piratebay.live', priority: 2 },
   { url: 'https://1.piratebays.to', priority: 3 },
   { url: 'https://tpb.party', priority: 4 },
 ];
+
+const MIRRORS = (process.env.TPB_MIRRORS?.trim()
+  ? process.env.TPB_MIRRORS.split(',').map((url, i) => ({ url: url.trim(), priority: i + 1 })).filter(m => m.url)
+  : DEFAULT_MIRRORS);
 
 export async function searchTpb(query: string, type: 'movie' | 'series' | 'anime' = 'movie'): Promise<TpbTorrent[]> {
   // Tenta query completo primeiro, depois versões mais curtas (TPB é restritivo com queries longas)

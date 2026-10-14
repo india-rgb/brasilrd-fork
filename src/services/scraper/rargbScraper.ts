@@ -9,7 +9,7 @@ import { agenteHttps, lookupCustomizado } from './wordpressScraper.js';
 
 const logger = new Logger('RargbScraper');
 
-const RARGB_BASE = 'https://rargb.to';
+const RARGB_BASE = process.env.RARGB_BASE_URL?.trim() || 'https://rargb.to';
 
 // ── Tipos ─────────────────────────────────────────────────────────────
 

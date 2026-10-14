@@ -180,19 +180,19 @@ interface WordPressSite {
 const WP_SITES: WordPressSite[] = [
   {
     name: 'Comando Torrents',
-    baseUrl: 'https://comando1.com',
+    baseUrl: process.env.WORDPRESS_COMANDO_URL?.trim() || 'https://comando1.com',
     priority: 2,
     timeout: 15000,
   },
   {
     name: 'Starck Oficial',
-    baseUrl: 'https://www.starck-oficial.com',
+    baseUrl: process.env.WORDPRESS_STARCK_URL?.trim() || 'https://www.starck-oficial.com',
     priority: 1,
     timeout: 15000,
   },
   {
     name: 'DarkMahou',
-    baseUrl: 'https://darkmahou.io',
+    baseUrl: process.env.WORDPRESS_DARKMAHOU_URL?.trim() || 'https://darkmahou.io',
     priority: 3, // Prioridade alta
     timeout: 15000,
   },

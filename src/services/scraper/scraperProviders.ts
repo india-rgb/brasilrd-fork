@@ -8,7 +8,7 @@ export const scraperProviders: ScraperProvider[] = [
 ];
 
 export const torrentIndexerConfig = {
-    baseUrl: 'https://torrent-indexer.darklyn.org',
+    baseUrl: process.env.TORRENT_INDEXER_URL?.trim() || 'https://torrent-indexer.darklyn.org',
     timeout: 15000,
     enabled: false,  // ❌ REMOVIDO — duplica scrapers BR (BLUDV/Comando)
     priority: 5

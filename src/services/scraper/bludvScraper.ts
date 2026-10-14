@@ -12,7 +12,7 @@ import { agenteHttps as dnsAgent, lookupCustomizado, requisicaoComFallback } fro
 
 const logger = new Logger('BludvScraper');
 
-const BASE_URL = 'https://bludvfilmes1.xyz';
+const BASE_URL = process.env.BLUDV_BASE_URL?.trim() || 'https://bludvfilmes1.xyz';
 const PROVIDER = 'BLUDV Filmes';
 const AXIOS_OPTS = {
   timeout: 15000,

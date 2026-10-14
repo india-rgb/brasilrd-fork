@@ -9,7 +9,7 @@ import { agenteHttps, lookupCustomizado } from './wordpressScraper.js';
 
 const logger = new Logger('StarckScraper');
 
-const STARCK_BASE = 'https://www.starck-oficial.com';
+const STARCK_BASE = process.env.STARCK_BASE_URL?.trim() || 'https://www.starck-oficial.com';
 
 // ── Tipos ─────────────────────────────────────────────────────────────
 
