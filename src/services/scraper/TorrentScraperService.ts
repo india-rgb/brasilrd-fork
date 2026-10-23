@@ -6,6 +6,7 @@ import { WordPressScraper } from './wordpressScraper.js';
 import { BludvScraper } from './bludvScraper.js';
 import { searchStarck } from './starckScraper.js';
 import { searchHdr } from './hdrScraper.js';
+import { searchTorrentIndexerBludv } from './torrentIndexerScraper.js';
 import { EpisodeMatcher } from '../../titulos/episodeMatcher.js';
 
 const logger = new Logger('TorrentScraperService');
@@ -58,6 +59,7 @@ export class TorrentScraperService {
             const wordpressEnabled = scraperEnabled('SCRAPER_WORDPRESS_ENABLED');
             const starckEnabled = scraperEnabled('SCRAPER_STARCK_ENABLED');
             const hdrEnabled = scraperEnabled('SCRAPER_HDR_ENABLED');
+            const torrentIndexerEnabled = scraperEnabled('SCRAPER_TORRENT_INDEXER_ENABLED');
 
             let tmdbData = null;
             if (imdbId) {
@@ -93,6 +95,9 @@ export class TorrentScraperService {
                     ...(bludvEnabled && !ehAnime ? [
                         this.bludvScraper.search(qEn, type).catch(() => []),
                         this.bludvScraper.search(qPt, type).catch(() => []),
+                    ] : []),
+                    ...(torrentIndexerEnabled && !ehAnime ? [
+                        searchTorrentIndexerBludv(qPt, type).catch(() => []),
                     ] : []),
                     ...(wordpressEnabled ? [
                         this.wpScraper.search(qEn, wpType, targetSeason).catch(() => []),
